@@ -3,7 +3,9 @@ use std::fs;
 use std::process;
 use std::error::Error;
 
-use site_gen::compile;
+mod lexer;
+use lexer::Lexer;
+use lexer::Token;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,8 +26,19 @@ fn run(filename: &str) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(filename)?;
     println!("contents:\n{contents}");
 
-    let html_gen = compile(&contents);
-    println!("html:\n{html_gen}");
+    let mut chars = contents.chars();
+    let mut lex = Lexer::new(&mut chars);
+
+    loop {
+        let tok = lex.next_token();
+        if tok == Token::EOF {
+            break;
+        }
+        println!("{:?}", tok);
+    }
+
+    //let html_gen = compile(&contents);
+    //println!("html:\n{html_gen}");
 
     Ok(())
 }

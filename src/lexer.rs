@@ -1,94 +1,173 @@
+use std::str::Chars;
+
+#[derive(Debug, PartialEq)]
 pub enum Token {
-    Text(String),
-    SmallBreak,             // space-space-newline
-    BigBreak,               // newline-newline
-    ItalicStart,            // *text
-    ItalicEnd,              // text*
-    BoldStart,              // **text
-    BoldEnd,                // text**
-    BoldItalicStart,        // ***text
-    BoldItalicEnd,          // text***
-    /* will implement later??
-    strikebound,            // ~~text
-    quote,                  // > text
-    header(u8),             // # text
-    unorderedlist,          // * text or - text
-    orderedlist(u32),       // number. text
-    codebound,              // `
-    blockcodebound,         // ```
-    sitelenponabound,       // $text
-    blockspbound,           // $$$
-    */
-    EOF                     //end of file
+    Word(String),           // string of non special chars
+    Stars(u8),              // has number of stars
+    Space,
+    BigSpace,               // 2 or more
+    NewLine,
+    EOF                     // end of file
 }
 
-struct Lexer {
+pub struct Lexer<'a> {
     curr: Option<char>,
-    chars: &mut impl Iterator<char>,
-    is_start: bool,
-    maybe_next_token: Option<Token>,
+    chars: &'a mut Chars<'a>,
 }
 
-impl Lexer {
-    fn eat(c: char) {
-        if (self.curr != Some(c)) {
-            panic!("Lexing error: expected {c}, got {self.curr}");
+impl<'a> Lexer<'a> {
+    fn eat(&mut self, c: char) {
+        if self.curr != Some(c) {
+            panic!("Lexing error: expected {}, got {:?}", c, self.curr);
         }
         self.curr = self.chars.next();
     }
 
-    pub fn new(chars: &mut impl Iterator<char>) -> Lexer {
-        let curr = chars.next();
-        while curr != None && c.is_whitespace() {
-            curr = chars.next();
-        }
-        Lexer { curr: curr, is_start: true, chars: chars }
+    pub fn new(chars: &'a mut Chars<'a>) -> Lexer<'a> {
+        
+        Lexer { curr: curr, chars: chars }
     }
 
-    pub fn next_token() -> Token {
-        if let Some(token) = self.maybe_next_token {
-            self.maybe_next_token = None;
-            return token;
+    fn eat_whitespace(&mut self) {
+        let mut curr = self.chars.next();
+        while let Some(c) = curr {
+            if !c.is_whitespace() {
+                break;
+            }
+            curr = self.chars.next();
         }
+    }
 
+    pub fn next_token(&mut self) -> Token {
         match self.curr {
-            Some('*') => lex_stars(),
-            Some(c) => lex_text(),
+            Some('*') => self.lex_stars(),
+            Some('\n') => {self.eat('\n'); Token::NewLine},
+            Some(c) => {
+                if c.is_whitespace() { self.lex_whitespace() }
+                else { self.lex_word() }
+            },
             None => Token::EOF
         }
     }
 
-    fn lex_text() -> Token {
-        let text = self.curr.toString();
-        eat(self.curr);
-
-        while let Some(c) = self.curr {
-            match self.curr {
-            }
-            
+    fn is_special_char(c: char) -> bool {
+        match c {
+            '*' => true,
+            _ => false
         }
     }
 
-    fn lex_stars() -> Token {
+    fn lex_newline(&mut self) -> Token {
+        self.eat('\n');
+    }
+
+    fn lex_whitespace(&mut self) -> Token {
+        let mut space_count = 0; 
+
+        while let Some(c) = self.curr {
+            match c {
+                '\n' => break,
+                ' ' => space_count += 1,
+                '\t' => space_count += 2,
+                a if !a.is_whitespace() => break,
+                _ => panic!("come write code to handle other whitespaces")
+            }
+            self.eat(c);
+        }
+        if space_count > 1 { Token::BigSpace } else { Token::Space }
+    }
+
+    fn lex_word(&mut self) -> Token {
+        let mut word = String::new();
+
+        while let Some(c) = self.curr {
+            if c.is_whitespace() || Self::is_special_char(c) {
+                break;
+            }
+            word.push(c);
+            self.eat(c);
+        }
+        Token::Word(word)
+    }
+
+    fn lex_stars(&mut self) -> Token {
         let mut star_count = 1;
-        eat('*');
-        while self.curr == '*' {
+        self.eat('*');
+        while let Some(c) = self.curr && c == '*' {
             star_count += 1; 
-            eat('*');
+            self.eat('*');
         } 
-        if self.is_start {
-            match star_count {
-                1 => return Token::ItalicStart,
-                2 => return Token::BoldStart,
-                _ => return Token::BoldItalicStart,
-            }
-        }
-        else {
-            match star_count {
-                1 => return Token::ItalicEnd,
-                2 => return Token::BoldEnd,
-                _ => return Token::BoldItalicEnd,
-            }
-        }
+        Token::Stars(star_count)
     } 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::Token::*;
+    
+    #[test]
+    fn empty() {
+        let empty = String::from("");
+        let mut chars = empty.chars();
+        let mut lex = Lexer::new(&mut chars);
+
+        assert_eq!(EOF, lex.next_token());
+        assert_eq!(EOF, lex.next_token());
+    }
+
+    #[test]
+    fn one_word() {
+        let text = String::from("words");
+        let mut chars = text.chars();
+        let mut lex = Lexer::new(&mut chars);
+
+        assert_eq!(Word(text.clone()), lex.next_token());
+        assert_eq!(EOF, lex.next_token());
+    }
+
+    #[test]
+    fn many_words() {
+        let text = String::from("hi foo bar");
+        let mut chars = text.chars();
+        let mut lex = Lexer::new(&mut chars);
+
+        assert_eq!(Word(String::from("hi")), lex.next_token());
+        assert_eq!(Space, lex.next_token());
+        assert_eq!(Word(String::from("foo")), lex.next_token());
+        assert_eq!(Space, lex.next_token());
+        assert_eq!(Word(String::from("bar")), lex.next_token());
+        assert_eq!(EOF, lex.next_token());
+    }
+
+    #[test]
+    fn big_spaces_and_newlines() {
+        let text = String::from("\n   \t    tab:\t\ntwo_spaces:  \nextra_spaces: \t \t\n\n");
+        let mut chars = text.chars();
+        let mut lex = Lexer::new(&mut chars);
+
+        let tokenized = vec![Word(String::from("tab:")), BigSpace, NewLine,
+            Word(String::from("two_spaces:")), BigSpace, NewLine,
+            Word(String::from("extra_spaces:")), BigSpace, NewLine, NewLine, EOF];
+
+        for token in tokenized {
+            assert_eq!(token, lex.next_token());
+        }
+    }
+
+    #[test]
+    fn text_and_stars() {
+        let text = String::from("* plain *italics* **bold** ***bold-italics***");
+        let mut chars = text.chars();
+        let mut lex = Lexer::new(&mut chars);
+
+        let tokenized = vec![Stars(1), Space, Word(String::from("plain")), Space,
+            Stars(1), Word(String::from("italics")), Stars(1), Space,
+            Stars(2), Word(String::from("bold")), Stars(2), Space,
+            Stars(3), Word(String::from("bold-italics")), Stars(3), EOF];
+
+        for token in tokenized {
+            assert_eq!(token, lex.next_token());
+        }
+    }
 }

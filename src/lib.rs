@@ -1,4 +1,4 @@
-#[derive(Debug)]
+/*#[derive(Debug)]
 enum Serial<T> {
     In(T),
     Last(T),
@@ -62,4 +62,4 @@ fn parse_chunk(chars: &mut impl Iterator<char>) -> Serial<Chunk> {
     }
     return Some(curr_chunk);
 }
-
+*/
